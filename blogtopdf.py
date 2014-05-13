@@ -22,27 +22,28 @@ def cerr(s):
     sys.stderr.flush()
 
 
-def FinderFinished(obj):
-    del obj
+def FinderFinished(key):
+    del g_finders[key]
     for url in g_urls:
         if g_urls[url] == 0:
-            capture = FrameCapture()
-            capture.load(url)
+            g_urls[url] = FrameCapture(url)
+            g_urls[url].load(url)
 
-def CaptureFinished(obj):
-    del obj
+def CaptureFinished(key):
+    g_urls[key] = None
     
 class WebLoader(QObject):
     
-    def __init__(self):
+    def __init__(self, key):
         super(WebLoader, self).__init__()
-        
+
+        self._key = key
         self._percent = 0
         self._page = QWebPage()
         self._page.mainFrame().setScrollBarPolicy(Qt.Vertical,  Qt.ScrollBarAlwaysOff)
         self._page.mainFrame().setScrollBarPolicy(Qt.Horizontal, Qt.ScrollBarAlwaysOff)
         self._page.loadProgress.connect(self.printProgress)
-        self._finished = pyqtSignal(self)
+        self._finished = pyqtSignal('string', 'key', self._key)
         
     def printProgress(self, percent):
         if self._percent >= percent:
@@ -62,8 +63,8 @@ class WebLoader(QObject):
                         
 class UrlFinder(WebLoader):
     
-    def __init__(self):
-        super(UrlFinder, self).__init__()
+    def __init__(self, key):
+        super(UrlFinder, self).__init__(key)
         self._page.loadFinished.connect(self.findUrls)
         self._finished.connect(FinderFinished)
 
@@ -94,8 +95,8 @@ class UrlFinder(WebLoader):
                         
 class FrameCapture(QObject):
     
-    def __init__(self):
-        super(FrameCapture, self).__init__()
+    def __init__(self, key):
+        super(FrameCapture, self).__init__(key)
         self._page.loadFinished.connect(self.saveResult)
         self._finished.connect(CaptureFinished)
 
@@ -170,11 +171,13 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     
     g_urls = {}
-    urlBase = 'http://coolshell.cn/page/'
+    g_finders = {}
+    urlBase = 'http://coolshell.cn/page/'    
     for page in range(1, 67):
-        pageurl = urlBase + str(page)
-        finder = UrlFinder()
-        finder.load(pageurl)
+        page = str(page)
+        pageurl = urlBase + page
+        g_finders[page] = UrlFinder(page)
+        g_finders[page].load(pageurl)
+        #finder.load(pageurl)
 
     app.exec_()
-    print(g_urls)
