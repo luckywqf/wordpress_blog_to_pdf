@@ -6,7 +6,7 @@ Example:
 
 import sys
 import time
-
+import platform
 from PyQt5.QtCore import pyqtSignal, QObject, QSize, Qt, QUrl
 from PyQt5.QtGui import QImage, QPainter, QPagedPaintDevice, QPdfWriter
 from PyQt5.QtWidgets import QApplication
@@ -23,27 +23,36 @@ def cerr(s):
 
 
 def FinderFinished(key):
-    del g_finders[key]
+#     global g_finders
+#     del g_finders[key]
+    print ("FinderFinished start!!!!!!!!!!!!!")
+    global g_urls
     for url in g_urls:
         if g_urls[url] == 0:
             g_urls[url] = FrameCapture(url)
             g_urls[url].load(url)
 
 def CaptureFinished(key):
-    g_urls[key] = None
+    global g_urls
+    del g_urls[key]
     
 class WebLoader(QObject):
+    
+    _finished = pyqtSignal(str)
     
     def __init__(self, key):
         super(WebLoader, self).__init__()
 
+#         if platform.python_version() < '3.0.0':
+#             self._key = unicode(key)
+  
         self._key = key
         self._percent = 0
         self._page = QWebPage()
         self._page.mainFrame().setScrollBarPolicy(Qt.Vertical,  Qt.ScrollBarAlwaysOff)
         self._page.mainFrame().setScrollBarPolicy(Qt.Horizontal, Qt.ScrollBarAlwaysOff)
         self._page.loadProgress.connect(self.printProgress)
-        self._finished = pyqtSignal('string', 'key', self._key)
+        
         
     def printProgress(self, percent):
         if self._percent >= percent:
@@ -56,7 +65,7 @@ class WebLoader(QObject):
     def load(self, url):
         self._percent = 0
         self._url = QUrl.fromUserInput(url)
-        self._page.mainFrame().load(url)
+        self._page.mainFrame().load(self._url)
         self._page.setViewportSize(QSize(1280, 800))  
         print("Loading... %s" % url)
                         
@@ -71,7 +80,7 @@ class UrlFinder(WebLoader):
     def findUrls(self, ok):
         if ok == False:
             print("Load %s failed", self._url.toString())
-            self.finished.emit()
+            self._finished.emit(self._key)
             return
         print('load finished, start parse urls')
         
@@ -86,14 +95,16 @@ class UrlFinder(WebLoader):
                 start = strs + 30
                 continue
             
-            str = allStr[strs : stre + 5]
-            g_urls.setdefault(str, 0)   
+            surl = allStr[strs : stre + 5] #surl = str(surl)
+            global g_urls
+            g_urls.setdefault(surl, 0)   
             start = stre
-        
-        self.finished.emit() 
+        print ("\nfinished!!!!!!!!!!!!!")
+#         self._finished.emit(self._key) 
+        FinderFinished(self._key)
         
                         
-class FrameCapture(QObject):
+class FrameCapture(WebLoader):
     
     def __init__(self, key):
         super(FrameCapture, self).__init__(key)
@@ -104,14 +115,16 @@ class FrameCapture(QObject):
         # Crude error-checking.
         if not ok:
             cerr("Failed loading %s\n" % self._url.toString())
-            self.finished.emit()
+            #self._finished.emit(self._key)
+            CaptureFinished(self._key)
             return
 
         # Save each frame in different image files.
         self._frameCounter = 0
         self.saveImage(self._page.mainFrame())
-        self.savePdf(self._page.mainFrame())   
-        self.finished.emit()
+        #self.savePdf(self._page.mainFrame())   
+        #self._finished.emit(self._key)
+        CaptureFinished(self._key)
         
     def getName(self, element):
         num = element.attribute("id")[5:]
@@ -121,6 +134,7 @@ class FrameCapture(QObject):
     def getPostElement(self, parentElement):
         element = parentElement.firstChild();
         while not element.isNull():
+            print element.tagName()
             if element.tagName() == "DIV" and element.hasAttribute("class") and element.attribute("class") == "post":
                 return element
             child = self.getPostElement(element)
@@ -162,19 +176,22 @@ if __name__ == '__main__':
     #    cerr(__doc__)
     #    sys.exit(1)
 
-    #proxy = QNetworkProxy(QNetworkProxy.HttpProxy, 'proxy.bei.gameloft.org', 3128)
-    #proxy.setUser('qifeng.wang')
-    #proxy.setPassword('Gameloft1')
-    #QNetworkProxy.setApplicationProxy(proxy)
-    #QNetworkProxyFactory.setUseSystemConfiguration(True)
-    
+
     app = QApplication(sys.argv)
     
+    proxy = QNetworkProxy(QNetworkProxy.HttpProxy, 'proxy.bei.gameloft.org', 3128)
+    proxy.setUser('qifeng.wang')
+    proxy.setPassword('Gameloft1')
+    QNetworkProxy.setApplicationProxy(proxy)
+    #QNetworkProxyFactory.setUseSystemConfiguration(True)
+    
+    global g_urls
+    global g_finders
     g_urls = {}
     g_finders = {}
     urlBase = 'http://coolshell.cn/page/'    
-    for page in range(1, 67):
-        page = str(page)
+    for ipage in range(1, 2):
+        page = str(ipage)
         pageurl = urlBase + page
         g_finders[page] = UrlFinder(page)
         g_finders[page].load(pageurl)
