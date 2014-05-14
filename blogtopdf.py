@@ -9,6 +9,7 @@ import time
 import platform
 from PyQt5.QtCore import pyqtSignal, QObject, QSize, Qt, QUrl
 from PyQt5.QtGui import QImage, QPainter, QPagedPaintDevice, QPdfWriter
+from PyQt5.QtPrintSupport import QPrinter
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWebKitWidgets import QWebPage
 from PyQt5.QtNetwork import QNetworkProxyFactory, QNetworkProxy, QTcpSocket
@@ -66,7 +67,7 @@ class WebLoader(QObject):
         self._percent = 0
         self._url = QUrl.fromUserInput(url)
         self._page.mainFrame().load(self._url)
-        self._page.setViewportSize(QSize(1280, 800))  
+        self._page.setViewportSize(QSize(1920, 10000))  
         print("Loading... %s" % url)
                         
                         
@@ -108,6 +109,7 @@ class FrameCapture(WebLoader):
     
     def __init__(self, key):
         super(FrameCapture, self).__init__(key)
+        self._page.mainFrame().setZoomFactor(2.0)
         self._page.loadFinished.connect(self.saveResult)
         self._finished.connect(CaptureFinished)
 
@@ -121,20 +123,20 @@ class FrameCapture(WebLoader):
 
         # Save each frame in different image files.
         self._frameCounter = 0
-        self.saveImage(self._page.mainFrame())
-        #self.savePdf(self._page.mainFrame())   
+        #self.saveImage(self._page.mainFrame())
+        self.savePdf(self._page.mainFrame()) 
+        #self.printPdf(self._page.mainFrame())   
         #self._finished.emit(self._key)
         CaptureFinished(self._key)
         
     def getName(self, element):
         num = element.attribute("id")[5:]
         title = element.firstChild().toPlainText()
-        return num + '-' + title + '.png'
+        return num + '-' + title + '.pdf' #'.png'
     
     def getPostElement(self, parentElement):
         element = parentElement.firstChild();
         while not element.isNull():
-            print element.tagName()
             if element.tagName() == "DIV" and element.hasAttribute("class") and element.attribute("class") == "post":
                 return element
             child = self.getPostElement(element)
@@ -162,14 +164,27 @@ class FrameCapture(WebLoader):
         if element is not None:
             rect = element.geometry()
             pdf = QPdfWriter(self.getName(element))
-            pdf.setPageSize(QPagedPaintDevice.A4)
+            pdf.logicalDpiX
+            pdf.setPageSize(QPagedPaintDevice.A9)
             painter = QPainter(pdf)
             painter.setRenderHint(QPainter.Antialiasing, True)
             painter.setRenderHint(QPainter.TextAntialiasing, True)
             painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
             element.render(painter)
             painter.end()  
-    
+
+    def printPdf(self, frame):
+         element = self.getPostElement(frame.documentElement())
+         if element is not None:
+            rect = element.geometry()
+            pdf = QPrinter(QPrinter.ScreenResolution)
+            pdf.setFullPage(True)
+            pdf.setPrintRange(QPrinter.AllPages)
+            pdf.setOutputFileName(self.getName(element))
+            pdf.setOutputFormat(QPrinter.PdfFormat)
+            element.webFrame().print(pdf)
+        
+
 if __name__ == '__main__':
     #sys.argv = ['', 'http://coolshell.cn/articles/11235.html', 'xx.png']
     #if len(sys.argv) != 3:
@@ -179,10 +194,10 @@ if __name__ == '__main__':
 
     app = QApplication(sys.argv)
     
-    proxy = QNetworkProxy(QNetworkProxy.HttpProxy, 'proxy.bei.gameloft.org', 3128)
-    proxy.setUser('qifeng.wang')
-    proxy.setPassword('Gameloft1')
-    QNetworkProxy.setApplicationProxy(proxy)
+    #proxy = QNetworkProxy(QNetworkProxy.HttpProxy, 'proxy.bei.gameloft.org', 3128)
+    #proxy.setUser('qifeng.wang')
+    #proxy.setPassword('Gameloft1')
+    #QNetworkProxy.setApplicationProxy(proxy)
     #QNetworkProxyFactory.setUseSystemConfiguration(True)
     
     global g_urls
@@ -190,7 +205,7 @@ if __name__ == '__main__':
     g_urls = {}
     g_finders = {}
     urlBase = 'http://coolshell.cn/page/'    
-    for ipage in range(1, 2):
+    for ipage in range(9, 10):
         page = str(ipage)
         pageurl = urlBase + page
         g_finders[page] = UrlFinder(page)
